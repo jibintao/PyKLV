@@ -1,8 +1,10 @@
 import clr
+import os
 import sys
-import thread
+import datetime
 
-#sys.path.append(R'C:\Program Files (x86)\Anite\LogViewer\ALV2')
+sys.path.append(R'C:\Program Files (x86)\Anite\LogViewer\ALV2')
+sys.path.append(R'C:\Program Files (x86)\Anite\LogViewer\ALV2\Common')
 # clr.FindAssembly("Anite.Logging.Server.Interface.VS2015")
 clr.AddReference("Anite.Logging.Server.Interface.VS2015")
 
@@ -10,6 +12,9 @@ from System import *
 from System.Collections.Generic import *
 from Anite import *
 from Anite.Logging.Server.API import *
+
+global _validatedCount
+_validatedCount = 0
 
 logFileName = R"C:\Data\Unisoc\ALSI\AlsiNewSamples\AlsiSamples\TestFiles\MAC\170629_VDT.alf"
 filterFileName = R"C:\Data\Unisoc\ALSI\AlsiNewSamples\AlsiSamples\TestFiles\MAC\MAC_SummaryReports.alvf"
@@ -21,10 +26,10 @@ def Disconnected(sender, event):
     Alsi.Logger.Info("Plugin: Disconnected event Connected")
 
 def FetchAllRecords():
-   #progress = 0
-   totalRecordsCount = 0
-   lastPercentRecords = 0
-   for progress in range(0,100):
+    results = ""
+    totalRecordsCount = 0
+    lastPercentRecords = 0
+    for progress in range(0,100):
        progress = progress + 1
        percentRecords = (_viewRecordCount * progress) / 100
        requestedRecords = percentRecords - lastPercentRecords
@@ -37,10 +42,16 @@ def FetchAllRecords():
                if None != records:
                    totalRecordsCount = totalRecordsCount + records.Count
                    # 可以在这里decode log信息 以及进一步的处理，比如：保存到文件，获取自己关心的内容等
-                   ProcessFetchedRecords(records)
+                   results = results + ProcessFetchedRecords(records)
        lastPercentRecords = percentRecords;
+    # 保存结果到文件
+    nowTime=datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+    f = open(os.path.abspath(os.curdir) + "\\Log\\Log-" + nowTime + ".txt", "w")
+    f.write(results)
+    f.close()
 
 def ProcessFetchedRecords(records):
+    global _validatedCount
     for record in records:
         #parents = clr.Reference[List[IRecordRelationship]]()
         parents = List[IRecordRelationship]()
@@ -72,34 +83,35 @@ def ProcessFetchedRecords(records):
                 i = i + 1
 
         results = ""
-        result1 = CreateRecordHeaderText(record)
-        result2 = CreateRecordPayloadText(record)
+        result1 = CreateRecordHeaderText(record) + "\n"
+        result2 = CreateRecordPayloadText(record) + "\n"
+        validator = AlsiValidator()
+        status = validator.LogRecord(record)
+        if status.Code == Alsi.StatusCode.Ok:
+            _validatedCount = _validatedCount + 1
+            result2 = result2 + "\n" + str(record.RecordName) + "\nRecord Validated - OK\n"
+        else:
+            result2 = result2 + "\n" + str(record.RecordName) + "\nRecord Validated - Fail:" + str(status.Message) + "\n"
 
-        #print (result1)
-        #print (result2)
-        #results + str(result1) + str(result2)
         deserialiser = AlsiDeserialiser()
         ret = deserialiser.LogRecord(record)
         if Alsi.StatusCode.Ok == ret[0].Code:
-            result3 = CreateRecordText(ret[1])
-            #print (result3)
-
+            result3 = CreateRecordText(ret[1]) + "\n"
         results = result1 + result2 + result3
-        print(results)
+        
+        return results
 
 def CreateRecordHeaderText(record):
     results = ""
-    if record.XmlPayLoad.Contains("cause=\"rcInfoError\""):
-        myRecord = record
-        if myRecord is not None:
-            myRecord = clr.Convert(myRecord, IDecodedRecord)
+    if record.XmlPayLoad.Contains("cause=\"rcInfoError\"") == False:
+        if record is not None:
             results = results + "RECORD DETAILS:\n"
             results = results + "\n  local index         = " + str(record.LocalIndex)
             results = results + "\n  global index        = " + str(record.GlobalIndex)
             results = results + "\n  error code          = " + str(record.ErrorCode)
-            results = results + "\n  error message       = " + record.ErrorMessage
-            results = results + "\n  record name         = " + record.RecordName
-            results = results + "\n  record type         = " + record.RecordType
+            results = results + "\n  error message       = " + str(record.ErrorMessage)
+            results = results + "\n  record name         = " + str(record.RecordName)
+            results = results + "\n  record type         = " + str(record.RecordType)
             results = results + "\n  record id           = " + str(record.RecordId)
             results = results + "\n  record version id   = " + str(record.RecordVersionId)
             results = results + "\n  source              = " + str(record.Source)
@@ -128,10 +140,8 @@ def CreateRecordHeaderText(record):
 
 def CreateRecordPayloadText(record):
     results = ""
-    if record.XmlPayLoad.Contains("cause=\"rcInfoError\""):
-        myRecord = record
-        if myRecord is not None:
-            myRecord = clr.Convert(myRecord, IDecodedRecord)
+    if record.XmlPayLoad.Contains("cause=\"rcInfoError\"") == False:
+        if record is not None:
             results = "XML PAYLOAD:\n"
             results = results + str(record.XmlPayLoad) + "\n"
             results = results + str(record.XmlPayLoadElement) + "\n"
@@ -184,10 +194,6 @@ def CreateRecordText(record):
                                 results = results + "\n        found decode attribute = " + str(innerField.decode)
     return results
 
-def Deserialisation(record):
-    pass
-
-
 if __name__ == "__main__":   
     # 创建 Log server的实例
     _alsi = AniteLoggingServerInterface()
@@ -214,6 +220,11 @@ if __name__ == "__main__":
         if status.Code == Alsi.StatusCode.Ok:
             print "connect OK"
 
+    #_loggingServerInterface = AniteLoggingServerInterface()
+    #print(_loggingServerInterface)
+    #if _alsi is None:
+    #    print "object is null"
+    #_logFileAnalysis = _loggingServerInterface.LogFileAnalysis4(_connection)
     _logFileAnalysis = _alsi.LogFileAnalysis4(_connection)
     print(_logFileAnalysis)
     if _logFileAnalysis is None:
