@@ -37,8 +37,155 @@ def FetchAllRecords():
                if None != records:
                    totalRecordsCount = totalRecordsCount + records.Count
                    # 可以在这里decode log信息 以及进一步的处理，比如：保存到文件，获取自己关心的内容等
-                   print records
+                   ProcessFetchedRecords(records)
        lastPercentRecords = percentRecords;
+
+def ProcessFetchedRecords(records):
+    for record in records:
+        #parents = clr.Reference[List[IRecordRelationship]]()
+        parents = List[IRecordRelationship]()
+        ret = _logFileAnalysis.GetRecordParents(parents, _selectedViewId, record.GlobalIndex)
+        i = 0
+        if parents.Count > 0:
+            print("Record " + record.RecordName +", Global index " + record.GlobalIndex + " has " + parents.Count + " parents:")
+            for parent in parents:
+                decRecord = clr.Reference[List[IDecodedRecord2]]()
+                ret = _logFileAnalysis.GetDecodedRecordList(decRecord, _selectedViewId, parent.LocalIndex, 1)
+                if Alsi.StatusCode.Ok == ret[0].Code:
+                    print("  Parent Record " + i + ", GI = " + parent.GlobalIndex + ", LI = " + parent.LocalIndex + ", isHidden = " + parent.IsHidden + ", "+ decRecord[0].RecordName )
+                else:
+                    print("  Parent Record " + i + ", GI = " + parent.GlobalIndex + ", LI = " + parent.LocalIndex + ", isHidden = " + parent.IsHidden + ", Failed to decode related record ")
+                i = i + 1
+
+        children = List[IRecordRelationship]()
+        ret = _logFileAnalysis.GetRecordChildren(children, _selectedViewId, record.GlobalIndex)
+        i = 0
+        if children.Count > 0:
+            print("Record " + record.RecordName +", Global index " + record.GlobalIndex + " has " + parents.Count + " children:")
+            for child in children:
+                decRecord = clr.Reference[List[IDecodedRecord2]]()
+                ret = _logFileAnalysis.GetDecodedRecordList(decRecord, _selectedViewId, parent.LocalIndex, 1)
+                if Alsi.StatusCode.Ok == ret[0].Code:
+                    print("  Child Record " + i + ", GI = " + parent.GlobalIndex + ", LI = " + parent.LocalIndex + ", isHidden = " + parent.IsHidden + ", "+ decRecord[0].RecordName )
+                else:
+                    print("  Child Record " + i + ", GI = " + parent.GlobalIndex + ", LI = " + parent.LocalIndex + ", isHidden = " + parent.IsHidden + ", Failed to decode related record ")
+                i = i + 1
+
+        results = ""
+        result1 = CreateRecordHeaderText(record)
+        result2 = CreateRecordPayloadText(record)
+
+        #print (result1)
+        #print (result2)
+        #results + str(result1) + str(result2)
+        deserialiser = AlsiDeserialiser()
+        ret = deserialiser.LogRecord(record)
+        if Alsi.StatusCode.Ok == ret[0].Code:
+            result3 = CreateRecordText(ret[1])
+            #print (result3)
+
+        results = result1 + result2 + result3
+        print(results)
+
+def CreateRecordHeaderText(record):
+    results = ""
+    if record.XmlPayLoad.Contains("cause=\"rcInfoError\""):
+        myRecord = record
+        if myRecord is not None:
+            myRecord = clr.Convert(myRecord, IDecodedRecord)
+            results = results + "RECORD DETAILS:\n"
+            results = results + "\n  local index         = " + str(record.LocalIndex)
+            results = results + "\n  global index        = " + str(record.GlobalIndex)
+            results = results + "\n  error code          = " + str(record.ErrorCode)
+            results = results + "\n  error message       = " + record.ErrorMessage
+            results = results + "\n  record name         = " + record.RecordName
+            results = results + "\n  record type         = " + record.RecordType
+            results = results + "\n  record id           = " + str(record.RecordId)
+            results = results + "\n  record version id   = " + str(record.RecordVersionId)
+            results = results + "\n  source              = " + str(record.Source)
+            results = results + "\n  destination         = " + str(record.Destination)
+            results = results + "\n  frame number        = " + str(record.FrameNumber)
+            results = results + "\n  single line summary = " + str(record.SingleLineSummary)
+            results = results + "\n  summary             = " + str(record.Summary)
+            results = results + "\n  overview            = " + str(record.Overview)
+            results = results + "\n PROTOCOL INFO:"
+            results = results + "\n    protocol name           = " + str(record.ProtocolInfo.Name)
+            results = results + "\n    protocol id             = " + str(record.ProtocolInfo.Id)
+            results = results + "\n    protocol version name   = " + str(record.ProtocolInfo.VersionName)
+            results = results + "\n    protocol version id     = " + str(record.ProtocolInfo.VersionId)
+            results = results + "\n    protocol decoder path   = " + str(record.ProtocolInfo.DecoderPath)
+            results = results + "\n  TIMESTAMP INFO:"
+            results = results + "\n    local date               = " + str(record.TimeStampInfo.LocalDate)
+            results = results + "\n    local time               = " + str(record.TimeStampInfo.LocalTime)
+            results = results + "\n    delta time               = " + str(record.TimeStampInfo.DeltaTime)
+            results = results + "\n    short delta time         = " + str(record.TimeStampInfo.ShortDeltaTime)
+            results = results + "\n    has simulated delta time = " + str(record.TimeStampInfo.HasSimulatedDeltaTime)
+            results = results + "\n    simulated delta time     = " + str(record.TimeStampInfo.SimulatedDeltaTime)
+            results = results + "\n  RELATIONSHIP:"
+            results = results + "\n    has Parent = " + str(record.HasParents)
+
+    return results
+
+def CreateRecordPayloadText(record):
+    results = ""
+    if record.XmlPayLoad.Contains("cause=\"rcInfoError\""):
+        myRecord = record
+        if myRecord is not None:
+            myRecord = clr.Convert(myRecord, IDecodedRecord)
+            results = "XML PAYLOAD:\n"
+            results = results + str(record.XmlPayLoad) + "\n"
+            results = results + str(record.XmlPayLoadElement) + "\n"
+    return results
+
+def CreateRecordText(record):
+    results = ""
+    if record.cause != TRecordCause.rcInfoError:
+        pass
+    else:
+        results = results + "DE-SERIALISED PAYLOAD:"
+        if None != record.schema:
+            results = results + "\n  schema              = " + str(record.schema)
+
+        results = results + "\n  cause specified     = " + str(record.causeSpecified)
+        results = results + "\n  cause               = " + str(record.cause)
+
+        if None != record.Frame:
+            results = results + "\n  frame               = " + str(record.Frame)
+        if None != record.Summary:
+            results = results + "\n  summary               = " + str(record.Summary)
+        if None != record.Overview:
+            results = results + "\n  overview               = " + str(record.Overview)
+
+        if None != record.SourceCodeReference:
+            results = results + "\n  sourcecode reference line specified      = " + str(record.SourceCodeReference.lineSpecified)
+            results = results + "\n  sourcecode reference line                = " + str(record.SourceCodeReference.line)
+            results = results + "\n  sourcecode reference line description    = " + str(record.SourceCodeReference.description)
+            results = results + "\n  sourcecode reference line path           = " + str(record.SourceCodeReference.path)
+
+        if None != record.Field:
+            for field in record.Field:
+                if None != field:
+                    results = results + "\n  field name = " + str(field.name)
+                    for obj in field.Items:
+                        if obj is TValue:
+                            value = clr.Convert(obj, TValue)
+                            if None != value.Text:
+                                for svalue in value.Text:
+                                    results = results + "\n    value = " + str(svalue)
+                            if None != value.i:
+                                index = 0
+                                for svalue in value.i:
+                                    results = results + "\n    value[" + str(index) + "] = " + str(svalue)
+                                    index = index + 1
+                        elif obj is TField:
+                            innerField = clr.Convert(obj, TField)
+                            results = results + "\n    field name = " + str(innerField.name)
+                            if innerField.decodeSpecified:
+                                results = results + "\n        found decode attribute = " + str(innerField.decode)
+    return results
+
+def Deserialisation(record):
+    pass
 
 
 if __name__ == "__main__":   
