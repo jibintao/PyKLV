@@ -7,10 +7,18 @@ sys.path.append(R'C:\Program Files (x86)\Anite\LogViewer\ALV2')
 sys.path.append(R'C:\Program Files (x86)\Anite\LogViewer\ALV2\Common')
 # clr.FindAssembly("Anite.Logging.Server.Interface.VS2015")
 clr.AddReference("Anite.Logging.Server.Interface.VS2015")
-
+#clr.AddReference("System.Reflection.RuntimeAssembly")
+clr.AddReference('System.Collections')
+#clr.AddReference('Microsoft.Practices.Prism')
+clr.AddReference('Anite.Logs')
+clr.AddReference('Anite.Logs.Common')
+    
 from System import *
+from System.Runtime import *
+from System.Reflection import *
 from System.Collections.Generic import *
 from Anite import *
+from Anite.Logs import *
 from Anite.Logging.Server.API import *
 
 global _validatedCount
@@ -82,22 +90,20 @@ def ProcessFetchedRecords(records):
                     print("  Child Record " + i + ", GI = " + parent.GlobalIndex + ", LI = " + parent.LocalIndex + ", isHidden = " + parent.IsHidden + ", Failed to decode related record ")
                 i = i + 1
 
-        results = ""
-        result1 = CreateRecordHeaderText(record) + "\n"
-        result2 = CreateRecordPayloadText(record) + "\n"
+        results = CreateRecordHeaderText(record) + "\n"
+        results = results + CreateRecordPayloadText(record) + "\n"
         validator = AlsiValidator()
         status = validator.LogRecord(record)
         if status.Code == Alsi.StatusCode.Ok:
             _validatedCount = _validatedCount + 1
-            result2 = result2 + "\n" + str(record.RecordName) + "\nRecord Validated - OK\n"
+            results = results + "\n" + str(record.RecordName) + "\nRecord Validated - OK\n"
         else:
-            result2 = result2 + "\n" + str(record.RecordName) + "\nRecord Validated - Fail:" + str(status.Message) + "\n"
+            results = results + "\n" + str(record.RecordName) + "\nRecord Validated - Fail:" + str(status.Message) + "\n"
 
         deserialiser = AlsiDeserialiser()
         ret = deserialiser.LogRecord(record)
         if Alsi.StatusCode.Ok == ret[0].Code:
-            result3 = CreateRecordText(ret[1]) + "\n"
-        results = result1 + result2 + result3
+            results = results + CreateRecordText(ret[1]) + "\n"
         
         return results
 
@@ -200,10 +206,10 @@ if __name__ == "__main__":
     _alsi = clr.Convert(_alsi, IAniteLoggingServer2)
     print(_alsi)
     if _alsi is None:
-        print "object is null"
+        print ("object is null")
 
-    print _alsi.GetVersion()
-    print _alsi.GetBuiltInAlsiSchemaVersion.ToString()
+    print (_alsi.GetVersion())
+    print (_alsi.GetBuiltInAlsiSchemaVersion.ToString())
     _connection = _alsi.Connection
     _connection = clr.Convert(_connection, IConnection)
     _connection.OnConnected += Connected
@@ -211,14 +217,14 @@ if __name__ == "__main__":
     print(_connection)
     # 获取Log Server的信息
     status = _alsi.CheckLoggingServerCompatability()
-    print status
+    print (status)
     if status.Code == Alsi.StatusCode.Ok:
-        print "Anite Logging Server Version: " + status.Message
+        print ("Anite Logging Server Version: " + status.Message)
     # 连接到Server
     if _connection.IsConnected() == False:
         status = _connection.Connect()
         if status.Code == Alsi.StatusCode.Ok:
-            print "connect OK"
+            print ("connect OK")
 
     #_loggingServerInterface = AniteLoggingServerInterface()
     #print(_loggingServerInterface)
@@ -228,13 +234,13 @@ if __name__ == "__main__":
     _logFileAnalysis = _alsi.LogFileAnalysis4(_connection)
     print(_logFileAnalysis)
     if _logFileAnalysis is None:
-        print "object is null"
+        print ("object is null")
     # 打开Log 文件
     status = _logFileAnalysis.OpenLogFile(logFileName)
 
     # 元组的第一个保存status
     if Alsi.StatusCode.Ok != status[0].Code:
-        print "Open File failed."
+        print ("Open File failed.")
 
     # 元组的第二个保存record count
     _recordsCount = status[1] 
@@ -242,17 +248,17 @@ if __name__ == "__main__":
     # 加载Filter文件
     status = _logFileAnalysis.CreateLogFileView(filterFileName, None)
     if Alsi.StatusCode.Ok != status[0].Code:
-        print "Create Log File View failed."
+        print ("Create Log File View failed.")
 
     # 返回值第二个保存id
     _selectedViewId = status[1]
     _viewRecordCount = _recordsCountAfterFilter = status[2]
-
+	# 抓取并解析Log
     FetchAllRecords()
 
     # 关闭Log文件
     status = _logFileAnalysis.CloseLogFile()
     if Alsi.StatusCode.Ok != status.Code:
-        print "Error Code = " + status.Code.ToString() 
+        print ("Error Code = " + status.Code.ToString())
     # 断开连接
     _connection.Disconnect()
